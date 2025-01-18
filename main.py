@@ -35,7 +35,6 @@ def get_data(conn, table_name):
 ### APP CLASS ###
 
 ## Register Books
-
 class Input(ft.Row):
     def __init__(self, label, suffix_text=None, on_blur=None, width=None):
         super().__init__()
@@ -83,7 +82,7 @@ class Register(ft.Container):
             content=ft.Container(
                 content=ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.CALENDAR_MONTH),
+                        ft.Icon(ft.Icons.EDIT_CALENDAR),
                         ft.Text(value="Target date to finish the book", size=13)
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
@@ -100,6 +99,7 @@ class Register(ft.Container):
             controls=[
                 self.title,
                 ft.Row(
+                    spacing=0,
                     controls=[
                         self.total_pages,
                         self.target_date_button,
@@ -217,7 +217,9 @@ class Register(ft.Container):
             conn.commit()
             print("Book registered successfully.")
             # Optionally, provide user feedback
-            self.page.snack_bar = ft.SnackBar(ft.Text("Book registered successfully!"))
+            self.page.snack_bar = ft.SnackBar(
+                ft.Text("Book registered successfully!"),
+                duration=1000)
             self.page.snack_bar.open = True
             # Refresh the book list
             self.app.book_list.update_book_list()
@@ -240,34 +242,85 @@ class HeaderText(ft.Text):
             expand=True
         )
 
+class HeaderIcon(ft.Icon):
+    def __init__(self, icon_name, value):
+        super().__init__(
+            name=icon_name,
+            size=20,
+            tooltip=value,
+        )
+        
+class SortIcon(ft.IconButton):
+    def __init__(self, icon_name, on_click):
+        super().__init__(
+            icon=icon_name,
+            icon_size=25,
+            tooltip="Sort",
+            on_click=on_click
+        )    
+        
 class ListText(ft.Text):
-    def __init__(self, value, size=13):
+    def __init__(self, value, color=ft.Colors.SECONDARY, weight=ft.FontWeight.NORMAL, size=13):
         super().__init__(
             value=value,
-            style=ft.TextStyle(color=ft.Colors.SECONDARY, weight=ft.FontWeight.BOLD, size=size),
+            style=ft.TextStyle(color=color, weight=weight, size=size),
             expand=True
         )
 
+class DeleteConfirmationDialog(ft.AlertDialog):
+    def __init__(self, page, book, on_confirm):
+        super().__init__(
+            title=ft.Text("Delete Book"),
+            content=ft.Text("Do you want to delete this book?"),
+            actions=[
+                ft.TextButton("Cancel", on_click=self.close_dialog),
+                ft.ElevatedButton("Confirm", on_click=lambda e: self.confirm_and_close(on_confirm)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page = page
+
+    def close_dialog(self, e):
+        self.page.close(self)
+        self.page.update()
+
+    def confirm_and_close(self, on_confirm):
+        on_confirm()
+        self.page.close(self)
+        self.page.update()
+        self.close_dialog(None)
+
+# Dialog to edit or delete a book
 class EditBookDialog(ft.AlertDialog):
     def __init__(self, page, book, on_update, on_delete):
         super().__init__(
             content_padding=ft.padding.symmetric(vertical=5, horizontal=15)
         )
-        
         self.page = page
         self.book = book
         self.on_update = on_update
         self.on_delete = on_delete
 
         self.title_input = ft.TextField(label="Title", value=book["title"])
-        self.total_pages_input = ft.TextField(label="Total Pages", value=str(book["total_pages"]), keyboard_type=ft.KeyboardType.NUMBER)        
+        self.total_pages_input = ft.TextField(label="Total Pages", value=str(book["total_pages"]), keyboard_type=ft.KeyboardType.NUMBER)
         self.read_pages_input = ft.TextField(label="Read Pages", value=str(book["read_pages"]), keyboard_type=ft.KeyboardType.NUMBER)
-        # self.target_date_input = ft.TextField(label="Target Date", value=book["target_date"])
         self.target_date = datetime.datetime.strptime(book["target_date"], "%Y-%m-%d").date()
         self.target_date_button = ft.TextButton(
-            content=ft.Text(f"Target Date: {self.target_date.strftime('%Y-%m-%d')}"),
-            on_click=self.open_date_picker
-        )        
+            content=ft.Row(
+                spacing=0,
+                controls=[
+                    ft.IconButton(
+                        icon=ft.Icons.EDIT_CALENDAR,
+                    ),
+                    ft.Text(f"Target Date: {self.target_date.strftime('%Y-%m-%d')}"),
+                ]),
+        )
+
+        self.confirmation_dialog = DeleteConfirmationDialog(
+            self.page,
+            self.book,
+            on_confirm=lambda: self.delete_book(),
+        )
 
         self.content = ft.Column(
             height=380,
@@ -288,7 +341,6 @@ class EditBookDialog(ft.AlertDialog):
                 self.title_input,
                 self.total_pages_input,
                 self.read_pages_input,
-                # self.target_date_input,
                 self.target_date_button,
                 ft.Row(
                     controls=[
@@ -296,56 +348,34 @@ class EditBookDialog(ft.AlertDialog):
                         ft.IconButton(
                             icon=ft.Icons.DELETE_FOREVER_ROUNDED,
                             tooltip="Delete book",
-                            on_click=self.delete_book,
-                            icon_color=ft.colors.TERTIARY,
+                            on_click=lambda e: page.open(self.confirmation_dialog),
+                            icon_color=ft.Colors.TERTIARY,
                         ),
-                        # ft.ElevatedButton("Delete", on_click=self.delete_book, color=ft.Colors.ON_TERTIARY, bgcolor=ft.Colors.TERTIARY),
                         ft.ElevatedButton("Update", tooltip="Update book", on_click=self.update_book),
-                        ft.Container(),                
+                        ft.Container(),
                     ],
                     alignment=ft.MainAxisAlignment.END,
                 )
             ]
         )
 
-    def open_date_picker(self, e):
-        date_picker = ft.DatePicker(
-            first_date=datetime.date.today(),
-            last_date=datetime.date(2030, 12, 31),
-            on_change=self.date_changed,
-            on_dismiss=self.date_dismissed,
-        )
-        self.page.overlay.append(date_picker)
-        # date_picker.pick_date()
-        date_picker.open = True
-        self.page.update()
-
-    def date_changed(self, e):
-        target_date = e.control.value.date()
-        self.target_date = target_date.strftime('%Y-%m-%d')
-        self.target_date_button.content.value = f"Target Date: {self.target_date}"
-        self.update()
-
-    def date_dismissed(self, e):
-        self.page.overlay.clear()
-        self.update()
-
     def update_book(self, e):
         self.book["title"] = self.title_input.value
+        self.book["total_pages"] = int(self.total_pages_input.value)
         self.book["read_pages"] = int(self.read_pages_input.value)
         self.book["target_date"] = self.target_date
         self.on_update(self.book)
         self.close_dialog(e)
 
-    def delete_book(self, e):
+    def delete_book(self):
         self.on_delete(self.book)
-        self.close_dialog(e)
-
+        self.close_dialog(self)
 
     def close_dialog(self, e):
         self.page.close(self)
 
-        
+
+# Main book list component
 class BookList(ft.Column):
     def __init__(self, page):
         super().__init__()
@@ -355,30 +385,18 @@ class BookList(ft.Column):
         self.sort_by = "read_percentage"  # Default sorting criteria
         self.sort_order = True  # True for ascending, False for descending
 
-        # Add headers
         headers = ft.Row(
             controls=[
                 ft.Container(expand=5, content=HeaderText("Title")),
                 ft.Row(spacing=0, expand=2, controls=[
-                    # HeaderText("Read"),
-                    ft.IconButton(
-                        icon=ft.Icons.ARROW_DROP_DOWN,
-                        icon_size=20,
-                        tooltip="Sort",
-                        on_click=self.sort_by_read_percentage
-                    ),
+                    ft.Container(width=8, content=HeaderIcon(ft.Icons.INCOMPLETE_CIRCLE, "Read")),
+                    SortIcon(ft.Icons.ARROW_DROP_DOWN, on_click=self.sort_by_read_percentage),
                 ]),
                 ft.Row(spacing=0, expand=3, controls=[
-                    HeaderText("Target"),
-                    ft.IconButton(
-                        icon=ft.Icons.ARROW_DROP_DOWN,
-                        icon_size=20,
-                        padding=ft.padding.all(0),
-                        tooltip="Sort",
-                        on_click=self.sort_by_target_date
-                    ),
+                    ft.Container(width=8, content=HeaderIcon(ft.Icons.CALENDAR_MONTH, "Target date")),
+                    SortIcon(ft.Icons.ARROW_DROP_DOWN, on_click=self.sort_by_target_date),
                 ]),
-                ft.Container(expand=3, content=HeaderText("Daily target")),
+                ft.Container(expand=4, alignment=ft.alignment.center_left, content=HeaderIcon(ft.Icons.MENU_BOOK, "Daily target")),
                 ft.Container(width=15),
             ],
         )
@@ -388,14 +406,12 @@ class BookList(ft.Column):
         self.update_book_list()
 
     def update_book_list(self):
-        # Clear the current list
         self.book_list.controls.clear()
 
         db_path = os.path.join(os.path.dirname(__file__), 'db', 'books.db')
         conn = connect_to_database(db_path)
         books = get_data(conn, "book")
 
-        # Sort books based on the selected criteria and order
         if self.sort_by == "read_percentage":
             books.sort(key=lambda book: (book["read_pages"] / book["total_pages"]) * 100,
                        reverse=not self.sort_order)
@@ -413,15 +429,19 @@ class BookList(ft.Column):
             if days_to_target > 0:
                 daily_target = math.ceil(remaining_pages / days_to_target)
                 daily_target_text = f"{daily_target} pages/day"
+                daily_target_color = ft.Colors.SECONDARY
+                daily_target_weight = ft.FontWeight.NORMAL
             else:
                 daily_target_text = "Target date passed"
+                daily_target_color = ft.Colors.ON_TERTIARY_CONTAINER
+                daily_target_weight = ft.FontWeight.BOLD
 
             book_entry = ft.Row(
                 controls=[
-                    ft.Container(expand=5, content=ListText(book["title"], size=14)),
+                    ft.Container(expand=5, content=ListText(book["title"], weight=ft.FontWeight.BOLD, size=14)),
                     ft.Container(expand=2, content=ListText(f'{read_percentage} %')),
                     ft.Container(expand=3, content=ListText(target_date)),
-                    ft.Container(expand=3, content=ListText(daily_target_text)),
+                    ft.Container(expand=4, content=ListText(daily_target_text, daily_target_color, daily_target_weight)),
                     ft.Container(width=15, content=ft.IconButton(
                         icon=ft.Icons.EDIT,
                         icon_size=17,
@@ -433,31 +453,24 @@ class BookList(ft.Column):
             )
             self.book_list.controls.append(book_entry)
 
-        # Close the database connection
         conn.close()
-
-        # Update the page
         self.page.update()
 
     def sort_by_read_percentage(self, e):
         self.sort_by = "read_percentage"
-        self.sort_order = not self.sort_order  # Toggle the sorting order
+        self.sort_order = not self.sort_order
         self.update_book_list()
 
     def sort_by_target_date(self, e):
         self.sort_by = "target_date"
-        self.sort_order = not self.sort_order  # Toggle the sorting order
+        self.sort_order = not self.sort_order
         self.update_book_list()
 
     def open_edit_dialog(self, book):
         def on_update(updated_book):
-            # Construct the path to the database file
             db_path = os.path.join(os.path.dirname(__file__), 'db', 'books.db')
-
-            # Connect to the database
             conn = connect_to_database(db_path)
 
-            # Update the book data in the database
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE book
@@ -467,26 +480,19 @@ class BookList(ft.Column):
             conn.commit()
             conn.close()
 
-            # Refresh the book list
             self.update_book_list()
 
         def on_delete(book_to_delete):
-            # Construct the path to the database file
             db_path = os.path.join(os.path.dirname(__file__), 'db', 'books.db')
-
-            # Connect to the database
             conn = connect_to_database(db_path)
 
-            # Delete the book data from the database
             cursor = conn.cursor()
             cursor.execute("DELETE FROM book WHERE id = ?", (book_to_delete["id"],))
             conn.commit()
             conn.close()
 
-            # Refresh the book list
             self.update_book_list()
 
-            # Show Snackbar after deletion
             self.page.snack_bar = ft.SnackBar(ft.Text(f"Deleted book: '{book_to_delete['title']}'"), bgcolor=ft.Colors.ON_PRIMARY_CONTAINER)
             self.page.snack_bar.open = True
             self.page.update()
@@ -495,7 +501,6 @@ class BookList(ft.Column):
         self.page.overlay.append(dialog)
         dialog.open = True
         self.page.update()
-
 
 ## Yomou              
 class Yomou(ft.Column):
