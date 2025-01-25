@@ -73,7 +73,7 @@ class Register(ft.Container):
         )
                 
         self.bt_register = ft.ElevatedButton(
-            " Add Book ",
+            " YOMOU ",
             on_click=self.register_book
         )
 
@@ -313,7 +313,9 @@ class EditBookDialog(ft.AlertDialog):
                         icon=ft.Icons.EDIT_CALENDAR,
                     ),
                     ft.Text(f"Target Date: {self.target_date.strftime('%Y-%m-%d')}"),
-                ]),
+                ]
+            ),
+            on_click=self.open_date_picker,
         )
 
         self.confirmation_dialog = DeleteConfirmationDialog(
@@ -359,6 +361,30 @@ class EditBookDialog(ft.AlertDialog):
             ]
         )
 
+    # DatePicker for setting the new target date
+    def open_date_picker(self, e):
+        date_picker = ft.DatePicker(
+            first_date=datetime.date.today(),
+            last_date=datetime.date(2030, 12, 31),
+            on_change=self.date_changed,
+            on_dismiss=self.date_dismissed,
+        )
+        self.page.overlay.append(date_picker)
+        # date_picker.pick_date()
+        date_picker.open = True
+        self.page.update()
+        
+    def date_changed(self, e):
+        target_date = e.control.value.date()
+        self.target_date = target_date.strftime('%Y-%m-%d')
+        self.target_date_button.content.controls[1].value = f"Target Date: {self.target_date}"
+        self.update()
+        
+    def date_dismissed(self, e):
+        self.page.overlay.clear()
+        self.update()
+
+
     def update_book(self, e):
         self.book["title"] = self.title_input.value
         self.book["total_pages"] = int(self.total_pages_input.value)
@@ -378,7 +404,10 @@ class EditBookDialog(ft.AlertDialog):
 # Main book list component
 class BookList(ft.Column):
     def __init__(self, page):
-        super().__init__()
+        super().__init__(
+            spacing=0,
+            scroll=ft.ScrollMode.AUTO,
+        )
 
         self.page = page
         self.book_list = ft.Column(spacing=0)
@@ -387,7 +416,8 @@ class BookList(ft.Column):
 
         headers = ft.Row(
             controls=[
-                ft.Container(expand=5, content=HeaderText("Title")),
+                ft.Container(expand=5),                
+                # ft.Container(expand=5, content=HeaderText("Title")),
                 ft.Row(spacing=0, expand=2, controls=[
                     ft.Container(width=8, content=HeaderIcon(ft.Icons.INCOMPLETE_CIRCLE, "Read")),
                     SortIcon(ft.Icons.ARROW_DROP_DOWN, on_click=self.sort_by_read_percentage),
@@ -433,7 +463,7 @@ class BookList(ft.Column):
                 daily_target_weight = ft.FontWeight.NORMAL
             else:
                 daily_target_text = "Target date passed"
-                daily_target_color = ft.Colors.ON_TERTIARY_CONTAINER
+                daily_target_color = ft.Colors.TERTIARY
                 daily_target_weight = ft.FontWeight.BOLD
 
             book_entry = ft.Row(
